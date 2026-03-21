@@ -29,67 +29,98 @@ This repository is a **backend service** for scheduling **30-minute sessions** b
 
 ---
 
-## API reference
+- **Input (bodies):** `Content-Type: application/json`
+- **Output:** JSON with `Content-Type: application/json`, except **`204 No Content`** (empty body)
 
-Base URL: `http://localhost:8080` (adjust host/port as needed).
+Endpoints are grouped like the OpenAPI tags in Swagger UI.
 
-All JSON bodies use `Content-Type: application/json`.
+### Error responses (all groups)
+
+On failure:
+
+```json
+{ "error": "human-readable message" }
+```
+
+Typical status codes: `400` (validation / bad request), `403` (forbidden), `404` (not found), `409` (conflict), `500` (server error).
+
+---
 
 ### Coaches
+
+**Register coaches and set weekly availability (local wall time).**
+
+| Method | Endpoint | Input summary | Output summary |
+|--------|----------|---------------|----------------|
+| `POST` | `/coaches` | Body: `name`, `timezone` | `201` — coach JSON |
+| `GET` | `/coaches/:id` | Path: `id` | `200` — coach JSON |
+| `POST` | `/coaches/availability` | Body: `coach_id`, `day`, `start_time`, `end_time` | `200` — confirmation JSON |
 
 #### `POST /coaches`
 
 Register a coach. `timezone` must be a valid **IANA** name (e.g. `Asia/Kolkata`, `UTC`).
 
-**Request body**
+**Input**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | yes | Display name |
-| `timezone` | string | yes | IANA timezone for availability and slot dates |
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Body | `name` | string | yes | Display name |
+| Body | `timezone` | string | yes | IANA timezone for availability and `date` on slot queries |
 
-**Response:** `201 Created`
+**Output — `201 Created`**
 
 ```json
 {
   "id": 1,
   "name": "Coach A",
   "timezone": "Asia/Kolkata",
-  "CreatedAt": "...",
-  "UpdatedAt": "..."
+  "CreatedAt": "2026-03-21T12:00:00Z",
+  "UpdatedAt": "2026-03-21T12:00:00Z"
 }
 ```
 
-*(Internal timestamp field names may appear as `CreatedAt` / `UpdatedAt` in JSON.)*
-
-**Errors:** `400` invalid name/timezone.
+**Errors:** `400` invalid JSON or invalid name/timezone.
 
 ---
 
 #### `GET /coaches/:id`
 
-Fetch one coach by ID (`id` path parameter).
+**Input**
 
-**Response:** `200 OK` — same shape as create (`id`, `name`, `timezone`, …).
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Path | `id` | integer | yes | Coach primary key |
 
-**Errors:** `400` invalid id, `404` not found.
+**Output — `200 OK`**
+
+```json
+{
+  "id": 1,
+  "name": "Coach A",
+  "timezone": "Asia/Kolkata",
+  "CreatedAt": "2026-03-21T12:00:00Z",
+  "UpdatedAt": "2026-03-21T12:00:00Z"
+}
+```
+
+**Errors:** `400` invalid `id`, `404` coach not found.
 
 ---
 
 #### `POST /coaches/availability`
 
-Add one weekly window (coach-local **24h** `HH:MM`). Call multiple times for more weekdays or ranges.
+Add one recurring weekly window in the coach’s local **24h** `HH:MM`. Call again for other weekdays or ranges.
 
-**Request body**
+**Input**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `coach_id` | number | yes | Coach ID |
-| `day` | string | yes | Weekday: name (`Monday`, `Tuesday`, …) or `0`–`6` (Sunday=0 … Saturday=6) |
-| `start_time` | string | yes | e.g. `"09:00"` |
-| `end_time` | string | yes | e.g. `"14:00"` (exclusive end for last slot edge; slots are 30 minutes) |
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Body | `coach_id` | integer | yes | Coach ID |
+| Body | `day` | string | yes | `Monday`, … or `0`–`6` (Sunday=0 … Saturday=6) |
+| Body | `start_time` | string | yes | e.g. `"09:00"` |
+| Body | `end_time` | string | yes | e.g. `"14:00"` (slots are 30 minutes inside the window) |
 
-**Response:** `200 OK`
+**Output — `200 OK`**
 
 ```json
 {
@@ -101,105 +132,146 @@ Add one weekly window (coach-local **24h** `HH:MM`). Call multiple times for mor
 }
 ```
 
-**Errors:** `400` bad JSON / invalid window, `404` coach not found.
-
----
-
-#### `GET /coaches/:coach_id/slots`
-
-List **available** (not yet booked) 30-minute slot **start** times for one calendar day.
-
-**Query parameters**
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `date` | yes | `YYYY-MM-DD` in the **coach’s** timezone (calendar day). A full ISO date-time prefix is accepted; only the date part is used. |
-
-**Response:** `200 OK` — JSON array of strings, each **UTC RFC3339** (suffix `Z`).
-
-```json
-["2024-04-24T04:00:00Z", "2024-04-24T04:30:00Z"]
-```
-
-**Errors:** `400` missing/invalid `date` or coach timezone, `404` coach not found.
+**Errors:** `400` invalid JSON, missing `coach_id`, bad weekday/window, `404` coach not found.
 
 ---
 
 ### Users
 
+**End-user accounts (required for bookings).**
+
+| Method | Endpoint | Input summary | Output summary |
+|--------|----------|---------------|----------------|
+| `POST` | `/users` | Body: `name`, `email` | `201` — user JSON |
+| `GET` | `/users/:id` | Path: `id` | `200` — user JSON |
+
 #### `POST /users`
 
-Register a user (needed before booking).
+**Input**
 
-**Request body**
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Body | `name` | string | yes | Display name |
+| Body | `email` | string | yes | Unique email |
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | yes | Display name |
-| `email` | string | yes | Valid email address; must be unique |
-
-**Response:** `201 Created`
+**Output — `201 Created`**
 
 ```json
 {
   "id": 1,
   "name": "Jane",
   "email": "jane@example.com",
-  "CreatedAt": "...",
-  "UpdatedAt": "..."
+  "CreatedAt": "2026-03-21T12:00:00Z",
+  "UpdatedAt": "2026-03-21T12:00:00Z"
 }
 ```
 
-**Errors:** `400` invalid input, `409` email already registered.
+**Errors:** `400` invalid JSON or invalid input, `409` email already registered.
 
 ---
 
 #### `GET /users/:id`
 
-Fetch one user by ID.
+**Input**
 
-**Response:** `200 OK` — same fields as create.
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Path | `id` | integer | yes | User primary key |
 
-**Errors:** `400` invalid id, `404` not found.
+**Output — `200 OK`**
+
+```json
+{
+  "id": 1,
+  "name": "Jane",
+  "email": "jane@example.com",
+  "CreatedAt": "2026-03-21T12:00:00Z",
+  "UpdatedAt": "2026-03-21T12:00:00Z"
+}
+```
+
+**Errors:** `400` invalid `id`, `404` user not found.
+
+---
+
+### Slots
+
+**Query open 30-minute appointment starts for a coach + calendar day.**
+
+| Method | Endpoint | Input summary | Output summary |
+|--------|----------|---------------|----------------|
+| `GET` | `/coaches/:coach_id/slots` | Path: `coach_id`; query: `date` | `200` — JSON array of **UTC** RFC3339 strings (`Z`) |
+| `GET` | `/users/slots` | Query: `coach_id`, `date` | `200` — JSON array of RFC3339 strings in **coach IANA timezone** |
+
+Both use the same rules: `date` is **`YYYY-MM-DD` on the coach’s local calendar**; only **unbooked** 30-minute starts are returned.
+
+#### `GET /coaches/:coach_id/slots`
+
+**Input**
+
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Path | `coach_id` | integer | yes | Coach primary key |
+| Query | `date` | string | yes | Coach-local day; longer ISO date prefix allowed (date part only is used) |
+
+**Output — `200 OK`** (JSON array of strings)
+
+```json
+["2024-04-24T04:00:00Z", "2024-04-24T04:30:00Z"]
+```
+
+`[]` if no available slots.
+
+**Errors:** `400` bad `coach_id` / `date` or invalid coach timezone, `404` coach not found.
 
 ---
 
 #### `GET /users/slots`
 
-Same slot logic as `GET /coaches/:coach_id/slots`, but `coach_id` is a **query** parameter and each time string is formatted in the **coach’s IANA timezone** (RFC3339 with offset, e.g. `+05:30`).
+Same slot set as above; each instant is formatted in the coach’s timezone (RFC3339 with offset, e.g. `+05:30`).
 
-**Query parameters**
+**Input**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `coach_id` | yes | Coach ID |
-| `date` | yes | `YYYY-MM-DD` (coach-local day) |
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Query | `coach_id` | integer | yes | Coach primary key |
+| Query | `date` | string | yes | `YYYY-MM-DD` (coach-local calendar day) |
 
-**Response:** `200 OK`
+**Output — `200 OK`** (JSON array of strings)
 
 ```json
 ["2024-04-24T09:30:00+05:30", "2024-04-24T10:00:00+05:30"]
 ```
 
-**Errors:** same as coach slots endpoint.
+`[]` if no slots.
+
+**Errors:** same as `GET /coaches/:coach_id/slots`.
 
 ---
 
 ### Bookings
 
+**Book, list, and cancel appointments.**
+
+| Method | Endpoint | Input summary | Output summary |
+|--------|----------|---------------|----------------|
+| `POST` | `/users/bookings` | Body: `user_id`, `coach_id`, `datetime` | `201` — booking JSON |
+| `GET` | `/users/bookings` | Query: `user_id` | `200` — JSON array of booking objects |
+| `DELETE` | `/users/bookings/:id` | Path: `id`; query: `user_id` | `204` — no body |
+
 #### `POST /users/bookings`
 
-Book one slot. `user_id` and `coach_id` must exist. `datetime` must be **RFC3339** and match an **available** slot (same instant as returned by a slots endpoint). Use the **exact** string from `GET .../slots` when possible.
+`datetime` must be **RFC3339** and match an **available** slot (same instant as from a slots endpoint). Prefer the **exact** string from `GET .../slots`.
 
-**Request body**
+**Input**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `user_id` | number | yes | Existing user |
-| `coach_id` | number | yes | Existing coach |
-| `datetime` | string | yes | RFC3339, e.g. `2024-04-24T04:00:00Z` or `2024-04-24T09:30:00+05:30` |
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Body | `user_id` | integer | yes | Existing user |
+| Body | `coach_id` | integer | yes | Existing coach |
+| Body | `datetime` | string | yes | RFC3339, e.g. `2024-04-24T04:00:00Z` |
 
-**Response:** `201 Created`
+**Output — `201 Created`**
 
 ```json
 {
@@ -213,23 +285,23 @@ Book one slot. `user_id` and `coach_id` must exist. `datetime` must be **RFC3339
 }
 ```
 
-`cancelled_at` appears only if applicable.
+`cancelled_at` appears only when the booking is cancelled.
 
-**Errors:** `400` bad input / slot not available / not on 30-minute boundary, `404` user or coach not found, `409` slot already taken.
+**Errors:** `400` bad JSON, missing fields, bad `datetime`, slot not bookable; `404` user or coach not found; `409` slot taken.
 
 ---
 
 #### `GET /users/bookings`
 
-List all **non-cancelled** bookings for a user (past and future).
+Lists **non-cancelled** bookings for the user. Nested `user` / `coach` are `{ id, name }` only.
 
-**Query parameters**
+**Input**
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `user_id` | yes | User ID |
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Query | `user_id` | integer | yes | User primary key |
 
-**Response:** `200 OK` — array of the same booking object shape as `POST` (with `user` / `coach` summaries: `id`, `name` only).
+**Output — `200 OK`** (JSON array)
 
 ```json
 [
@@ -238,30 +310,33 @@ List all **non-cancelled** bookings for a user (past and future).
     "user_id": 1,
     "coach_id": 1,
     "slot_start": "2024-04-24T04:00:00Z",
-    "created_at": "...",
+    "created_at": "2026-03-21T14:00:00Z",
     "user": { "id": 1, "name": "Jane" },
     "coach": { "id": 1, "name": "Coach A" }
   }
 ]
 ```
 
-**Errors:** `400` missing `user_id`, `404` user not found.
+`[]` if none.
+
+**Errors:** `400` bad `user_id`, `404` user not found.
 
 ---
 
 #### `DELETE /users/bookings/:id`
 
-Cancel a booking. Path `id` is the **booking** id.
+**Input**
 
-**Query parameters**
+| Kind | Field | Type | Required | Description |
+|------|-------|------|----------|-------------|
+| Path | `id` | integer | yes | Booking primary key |
+| Query | `user_id` | integer | yes | Must own the booking |
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `user_id` | yes | Must own the booking |
+**Output — `204 No Content`**
 
-**Response:** `204 No Content`
+No body.
 
-**Errors:** `400` bad ids, `403` wrong user, `404` booking not found / already cancelled.
+**Errors:** `400` bad ids, `403` wrong user, `404` not found or already cancelled.
 
 ---
 
@@ -298,3 +373,4 @@ go test ./...
 | `internal/database` | Postgres DSN, migrate, partial unique index |
 | `internal/openapi` | Embedded `swagger.json` |
 | `internal/timeutil` | Weekday / date / time parsing helpers |
+
