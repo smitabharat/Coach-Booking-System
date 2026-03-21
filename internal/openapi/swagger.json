@@ -1,0 +1,271 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Coach Booking API",
+    "description": "Register users (POST /users) before booking. Register coaches (POST /coaches), set availability, query slots, book (POST /users/bookings with real user_id). GET /coaches/{id} and GET /users/{id} for lookups. PostgreSQL; IANA timezones; RFC3339 slot times.",
+    "version": "1.0.0"
+  },
+  "host": "localhost:8080",
+  "basePath": "/",
+  "schemes": ["http"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "tags": [
+    { "name": "coaches", "description": "Register coaches and set weekly availability (local wall time)" },
+    { "name": "slots", "description": "Query open 30-minute appointment starts for a coach + calendar day" },
+    { "name": "bookings", "description": "Book, list, and cancel appointments" },
+    { "name": "users", "description": "End-user accounts (required for bookings)" }
+  ],
+  "paths": {
+    "/coaches": {
+      "post": {
+        "tags": ["coaches"],
+        "summary": "Register a coach",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["name", "timezone"],
+              "properties": {
+                "name": { "type": "string" },
+                "timezone": { "type": "string", "example": "Asia/Kolkata", "description": "IANA timezone name" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": { "description": "Created" },
+          "400": { "description": "Bad request" }
+        }
+      }
+    },
+    "/coaches/{id}": {
+      "get": {
+        "tags": ["coaches"],
+        "summary": "Get coach by id",
+        "parameters": [
+          { "in": "path", "name": "id", "type": "integer", "required": true }
+        ],
+        "responses": {
+          "200": { "description": "OK" },
+          "400": { "description": "Bad request" },
+          "404": { "description": "Coach not found" }
+        }
+      }
+    },
+    "/coaches/availability": {
+      "post": {
+        "tags": ["coaches"],
+        "summary": "Set weekly availability (coach-local wall clock)",
+        "description": "Repeat for multiple weekdays (e.g. Monday 10:00-15:00, Wednesday 09:00-12:00). Use 24h HH:MM.",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["coach_id", "day", "start_time", "end_time"],
+              "properties": {
+                "coach_id": { "type": "integer", "format": "uint64" },
+                "day": { "type": "string", "example": "Monday" },
+                "start_time": { "type": "string", "example": "10:00" },
+                "end_time": { "type": "string", "example": "15:00" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Availability saved",
+            "schema": { "$ref": "#/definitions/SetAvailabilityResponse" }
+          },
+          "400": { "description": "Bad request" },
+          "404": { "description": "Coach not found" }
+        }
+      }
+    },
+    "/coaches/{coach_id}/slots": {
+      "get": {
+        "tags": ["slots", "coaches"],
+        "summary": "View available 30-minute slots (coach in path)",
+        "description": "Returns bookable 30-minute slot starts. Date is YYYY-MM-DD in the coach's timezone. Each value is UTC RFC3339 (Z suffix); no separate time_zone parameter. Use the exact string in POST /users/bookings.",
+        "parameters": [
+          { "in": "path", "name": "coach_id", "type": "integer", "required": true },
+          { "in": "query", "name": "date", "type": "string", "required": true, "description": "YYYY-MM-DD (coach-local day)" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of slot start times (UTC RFC3339)",
+            "schema": { "type": "array", "items": { "type": "string", "example": "2024-01-01T10:00:00Z" } }
+          },
+          "400": { "description": "Bad request" },
+          "404": { "description": "Coach not found" }
+        }
+      }
+    },
+    "/users": {
+      "post": {
+        "tags": ["users"],
+        "summary": "Register a user",
+        "description": "Create a user first; use returned id as user_id when booking.",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["name", "email"],
+              "properties": {
+                "name": { "type": "string" },
+                "email": { "type": "string", "format": "email", "example": "you@example.com" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": { "description": "Created" },
+          "400": { "description": "Bad request" },
+          "409": { "description": "Email already registered" }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": ["users"],
+        "summary": "Get user by id",
+        "parameters": [
+          { "in": "path", "name": "id", "type": "integer", "required": true }
+        ],
+        "responses": {
+          "200": { "description": "OK" },
+          "404": { "description": "User not found" }
+        }
+      }
+    },
+    "/users/slots": {
+      "get": {
+        "tags": ["slots"],
+        "summary": "View available 30-minute slots (query coach_id)",
+        "description": "Same slot logic as GET /coaches/{coach_id}/slots, but each time string is in the coach's IANA timezone (RFC3339 with offset). GET /coaches/.../slots returns UTC (Z) instead.",
+        "parameters": [
+          { "in": "query", "name": "coach_id", "type": "integer", "required": true },
+          { "in": "query", "name": "date", "type": "string", "required": true, "description": "YYYY-MM-DD in coach timezone" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of RFC3339 slot starts in coach timezone",
+            "schema": { "type": "array", "items": { "type": "string" } }
+          },
+          "400": { "description": "Bad request" },
+          "404": { "description": "Coach not found" }
+        }
+      }
+    },
+    "/users/bookings": {
+      "get": {
+        "tags": ["bookings"],
+        "summary": "List all bookings for a user",
+        "description": "Non-cancelled appointments. Each item includes user {id,name} and coach {id,name} (no nested timestamps or email).",
+        "parameters": [
+          { "in": "query", "name": "user_id", "type": "integer", "required": true }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of bookings",
+            "schema": { "type": "array", "items": { "$ref": "#/definitions/BookingResponse" } }
+          },
+          "400": { "description": "Bad request" },
+          "404": { "description": "User not found" }
+        }
+      },
+      "post": {
+        "tags": ["bookings"],
+        "summary": "Book a 30-minute slot",
+        "description": "user_id must exist (POST /users). coach_id must exist.",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["user_id", "coach_id", "datetime"],
+              "properties": {
+                "user_id": { "type": "integer" },
+                "coach_id": { "type": "integer" },
+                "datetime": { "type": "string", "example": "2025-10-28T09:30:00Z", "description": "Exact value from GET .../slots (RFC3339)" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": { "$ref": "#/definitions/BookingResponse" }
+          },
+          "400": { "description": "Bad request" },
+          "409": { "description": "Slot taken (concurrent or duplicate)" }
+        }
+      }
+    },
+    "/users/bookings/{id}": {
+      "delete": {
+        "tags": ["bookings"],
+        "summary": "Cancel a booking",
+        "parameters": [
+          { "in": "path", "name": "id", "type": "integer", "required": true },
+          { "in": "query", "name": "user_id", "type": "integer", "required": true }
+        ],
+        "responses": {
+          "204": { "description": "No content" },
+          "403": { "description": "Forbidden" },
+          "404": { "description": "Not found" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "SetAvailabilityResponse": {
+      "type": "object",
+      "properties": {
+        "message": { "type": "string", "example": "Weekly availability saved successfully." },
+        "coach_id": { "type": "integer" },
+        "day": { "type": "string", "example": "Monday" },
+        "start_time": { "type": "string", "example": "10:00" },
+        "end_time": { "type": "string", "example": "15:00" }
+      }
+    },
+    "BookingUserBrief": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string" }
+      }
+    },
+    "BookingCoachBrief": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "name": { "type": "string" }
+      }
+    },
+    "BookingResponse": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "user_id": { "type": "integer" },
+        "coach_id": { "type": "integer" },
+        "slot_start": { "type": "string", "format": "date-time" },
+        "cancelled_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "user": { "$ref": "#/definitions/BookingUserBrief" },
+        "coach": { "$ref": "#/definitions/BookingCoachBrief" }
+      }
+    }
+  }
+}

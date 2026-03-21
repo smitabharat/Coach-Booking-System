@@ -1,5 +1,5 @@
-# Coach-Booking-System
-Design and build a RESTful API for a simple appointment booking system. The platform connects coaches with users who want to book 30-minute appointment slots. This task will assess your ability to design a system, model data, build APIs, and handle core business logic.
+# Coach Booking API
+
 ## Project description
 
 This repository is a **backend service** for scheduling **30-minute sessions** between clients (“users”) and coaches. Coaches define **recurring weekly availability** in their own **IANA timezone**; the API turns that into concrete open slots for a given calendar day, applies **bookings** with transactional checks so double-booking is avoided, and supports **listing** and **soft cancellation** of appointments.
@@ -18,7 +18,17 @@ This repository is a **backend service** for scheduling **30-minute sessions** b
 
 1. Create a database (e.g. `booking`). The app can create it automatically on first connect if missing (connects to `postgres` first).
 
-2. Start the server:
+2. Set a connection string (pick one):
+
+   | Variable | Purpose |
+   |----------|---------|
+   | `DATABASE_URL` | Full Postgres URL (highest priority) |
+   | `BOOKING_DB_DSN` | Same, second priority |
+   | `PGPASSWORD` (+ optional `PGUSER`, `PGHOST`, `PGPORT`, `PGDATABASE`) | Built into a URL if unset DSN |
+
+   If none are set, a **development default** is used (see `internal/database/database.go`).
+
+3. Start the server:
 
    ```bash
    cd "path/to/Nudgebee Assignment"
@@ -28,6 +38,10 @@ This repository is a **backend service** for scheduling **30-minute sessions** b
    Optional: `PORT=3000` to change the listen port (default **8080**).
 
 ---
+
+## API reference
+
+Base URL: `http://localhost:8080` (adjust host/port as needed).
 
 - **Input (bodies):** `Content-Type: application/json`
 - **Output:** JSON with `Content-Type: application/json`, except **`204 No Content`** (empty body)
@@ -373,4 +387,3 @@ go test ./...
 | `internal/database` | Postgres DSN, migrate, partial unique index |
 | `internal/openapi` | Embedded `swagger.json` |
 | `internal/timeutil` | Weekday / date / time parsing helpers |
-
