@@ -355,7 +355,7 @@ No body.
 ---
 
 ## Suggested flow (Swagger / testing)
-
+http://localhost:8080/swagger/index.html
 1. `POST /users` → note `id`  
 2. `POST /coaches` → note `id`  
 3. `POST /coaches/availability` (repeat for each weekday/window)  
