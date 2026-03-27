@@ -208,7 +208,10 @@ func (s *BookingService) BookSlot(userID, coachID uint, slotUTC time.Time) (*mod
 			return err
 		}
 
-		day := slotInCoachLocalDate(coach.Timezone, slotUTC)
+		day, err := slotInCoachLocalDate(coach.Timezone, slotUTC)
+		if err != nil {
+			return err
+		}
 		slots, err := s.slotsForDayTx(tx, coach, day)
 		if err != nil {
 			return err
@@ -253,12 +256,12 @@ func (s *BookingService) GetBookingPreloaded(id uint) (*models.Booking, error) {
 	return &b, nil
 }
 
-func slotInCoachLocalDate(tz string, slotUTC time.Time) string {
+func slotInCoachLocalDate(tz string, slotUTC time.Time) (string, error) {
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		return slotUTC.UTC().Format("2006-01-02")
+		return "", ErrInvalidTimezone
 	}
-	return slotUTC.In(loc).Format("2006-01-02")
+	return slotUTC.In(loc).Format("2006-01-02"), nil
 }
 
 func (s *BookingService) slotsForDayTx(tx *gorm.DB, coach models.Coach, dateYMD string) ([]time.Time, error) {
