@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -253,6 +255,35 @@ func mapServiceErr(err error) error {
 	case errors.Is(err, service.ErrInvalidTimezone):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	default:
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return mapUnexpectedInternalErr(err)
+	}
+}
+
+func mapUnexpectedInternalErr(err error) error {
+	// Log complete error for server-side debugging/root-cause analysis.
+	log.Printf("unexpected internal error: %v", err)
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return fiber.NewError(fiber.StatusGatewayTimeout, "request timed out")
+	case errors.Is(err, context.Canceled):
+		return fiber.NewError(fiber.StatusRequestTimeout, "request canceled")
+	}
+
+	msg := strings.ToLower(err.Error())
+	switch {
+	// DB/network availability classes. Keep response safe but actionable.
+	case strings.Contains(msg, "connection refused"),
+		strings.Contains(msg, "dial tcp"),
+		strings.Contains(msg, "broken pipe"),
+		strings.Contains(msg, "connection reset"),
+		strings.Contains(msg, "sqlstate 57p01"),
+		strings.Contains(msg, "database system is shutting down"):
+		return fiber.NewError(fiber.StatusServiceUnavailable, "database unavailable")
+	case strings.Contains(msg, "timeout"),
+		strings.Contains(msg, "i/o timeout"):
+		return fiber.NewError(fiber.StatusGatewayTimeout, "database timeout")
+	default:
+		return fiber.NewError(fiber.StatusInternalServerError, "internal server error")
 	}
 }
